@@ -17,22 +17,17 @@
 package org.apache.dubbo.demo.consumer;
 
 import org.apache.dubbo.common.constants.CommonConstants;
-import org.apache.dubbo.config.ApplicationConfig;
-import org.apache.dubbo.config.MetadataReportConfig;
-import org.apache.dubbo.config.ProtocolConfig;
-import org.apache.dubbo.config.ReferenceConfig;
-import org.apache.dubbo.config.RegistryConfig;
+import org.apache.dubbo.config.*;
 import org.apache.dubbo.config.bootstrap.DubboBootstrap;
 import org.apache.dubbo.demo.DemoService;
 import org.apache.dubbo.rpc.service.GenericService;
 
+import java.io.IOException;
+
 public class Application {
-    public static void main(String[] args) {
-        if (isClassic(args)) {
-            runWithRefer();
-        } else {
-            runWithBootstrap();
-        }
+    public static void main(String[] args) throws IOException {
+        runWithRefer();
+        System.in.read();
     }
 
     private static boolean isClassic(String[] args) {
@@ -65,9 +60,13 @@ public class Application {
     private static void runWithRefer() {
         ReferenceConfig<DemoService> reference = new ReferenceConfig<>();
         reference.setApplication(new ApplicationConfig("dubbo-demo-api-consumer"));
-        reference.setRegistry(new RegistryConfig("zookeeper://127.0.0.1:2181"));
-        reference.setMetadataReportConfig(new MetadataReportConfig("zookeeper://127.0.0.1:2181"));
+        reference.setRegistry(new RegistryConfig("nacos://127.0.0.1:8848"));
+        reference.setMetadataReportConfig(new MetadataReportConfig("nacos://127.0.0.1:8848"));
         reference.setInterface(DemoService.class);
+        //dubbo admin
+//        MonitorConfig monitorConfig = new MonitorConfig();
+//        monitorConfig.setAddress("http://localhost:8080");
+//        reference.setMonitor(monitorConfig);
         DemoService service = reference.get();
         String message = service.sayHello("dubbo");
         System.out.println(message);

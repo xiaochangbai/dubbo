@@ -17,23 +17,17 @@
 package org.apache.dubbo.demo.provider;
 
 import org.apache.dubbo.common.constants.CommonConstants;
-import org.apache.dubbo.config.ApplicationConfig;
-import org.apache.dubbo.config.MetadataReportConfig;
-import org.apache.dubbo.config.ProtocolConfig;
-import org.apache.dubbo.config.RegistryConfig;
-import org.apache.dubbo.config.ServiceConfig;
+import org.apache.dubbo.config.*;
 import org.apache.dubbo.config.bootstrap.DubboBootstrap;
 import org.apache.dubbo.demo.DemoService;
+import org.apache.dubbo.rpc.Protocol;
+import org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol;
 
 import java.util.concurrent.CountDownLatch;
 
 public class Application {
     public static void main(String[] args) throws Exception {
-        if (isClassic(args)) {
-            startWithExport();
-        } else {
-            startWithBootstrap();
-        }
+        startWithExport();
     }
 
     private static boolean isClassic(String[] args) {
@@ -59,8 +53,20 @@ public class Application {
         service.setInterface(DemoService.class);
         service.setRef(new DemoServiceImpl());
         service.setApplication(new ApplicationConfig("dubbo-demo-api-provider"));
-        service.setRegistry(new RegistryConfig("zookeeper://127.0.0.1:2181"));
-        service.setMetadataReportConfig(new MetadataReportConfig("zookeeper://127.0.0.1:2181"));
+        RegistryConfig registryConfig = new RegistryConfig("nacos://127.0.0.1:8848");
+        service.setRegistry(registryConfig);
+        service.setMetadataReportConfig(new MetadataReportConfig("nacos://127.0.0.1:8848"));
+
+        ProtocolConfig protocol = new ProtocolConfig();
+        protocol.setName("dubbo");
+        protocol.setPort(12690);
+        protocol.setHost("0.0.0.0");
+        service.setProtocol(protocol);
+
+        //dubbo admin
+//        MonitorConfig monitorConfig = new MonitorConfig();
+//        //monitorConfig.setAddress("http://localhost:8080");
+//        service.setMonitor(monitorConfig);
         service.export();
 
         System.out.println("dubbo service started");

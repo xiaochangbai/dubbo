@@ -79,6 +79,8 @@ public class ExchangeCodec extends TelnetCodec {
     @Override
     public Object decode(Channel channel, ChannelBuffer buffer) throws IOException {
         int readable = buffer.readableBytes();
+        //解决粘包/半包
+        //1、最多读取16个字节，并分配存储空间
         byte[] header = new byte[Math.min(readable, HEADER_LENGTH)];
         buffer.readBytes(header);
         return decode(channel, buffer, readable, header);
@@ -87,28 +89,37 @@ public class ExchangeCodec extends TelnetCodec {
     @Override
     protected Object decode(Channel channel, ChannelBuffer buffer, int readable, byte[] header) throws IOException {
         // check magic number.
+        //2 处理流起始处不是dubbo魔法数的场景
         if (readable > 0 && header[0] != MAGIC_HIGH
                 || readable > 1 && header[1] != MAGIC_LOW) {
             int length = header.length;
+            //3、流中还有数据可以读取
             if (header.length < readable) {
+                //4、为header重新分配空间，用来存储流中所有可读字节
                 header = Bytes.copyOf(header, readable);
+                //5、将流中剩余字节读取到header中
                 buffer.readBytes(header, length, readable - length);
             }
             for (int i = 1; i < header.length - 1; i++) {
                 if (header[i] == MAGIC_HIGH && header[i + 1] == MAGIC_LOW) {
+                    //6、将buffer读索引指向回Dubbo报文开头处
                     buffer.readerIndex(buffer.readerIndex() - header.length + i);
+                    //7、将流起始处至下一个dubbo报文之间的数据放到header中
                     header = Bytes.copyOf(header, i);
                     break;
                 }
             }
+            //8、主要用于解析header数据，比如用于Telnet
             return super.decode(channel, buffer, readable, header);
         }
         // check length.
+        //9、如果读取数据长度小于16个字节，则期待更多数据
         if (readable < HEADER_LENGTH) {
             return DecodeResult.NEED_MORE_INPUT;
         }
 
         // get data length.
+        //10、提取头部存储的报文长度，并校验长度是否超出限制
         int len = Bytes.bytes2int(header, 12);
 
         // When receiving response, how to exceed the length, then directly construct a response to the client.
@@ -119,6 +130,7 @@ public class ExchangeCodec extends TelnetCodec {
         }
 
         int tt = len + HEADER_LENGTH;
+        //11、校验是否可以读取完整dubbo报文，是否期待更多数据
         if (readable < tt) {
             return DecodeResult.NEED_MORE_INPUT;
         }
@@ -127,8 +139,10 @@ public class ExchangeCodec extends TelnetCodec {
         ChannelBufferInputStream is = new ChannelBufferInputStream(buffer, len);
 
         try {
+            //12、解码消息体，is流是完整的rpc调用报文
             return decodeBody(channel, is, header);
         } finally {
+            //13、如果解码过程有问题，则跳过这次rpc调用报文
             if (is.available() > 0) {
                 try {
                     if (logger.isWarnEnabled()) {
