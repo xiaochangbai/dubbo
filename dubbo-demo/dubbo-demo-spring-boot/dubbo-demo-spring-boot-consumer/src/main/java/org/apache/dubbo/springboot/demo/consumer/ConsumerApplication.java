@@ -17,8 +17,11 @@
 
 package org.apache.dubbo.springboot.demo.consumer;
 
+import org.apache.dubbo.config.annotation.Argument;
 import org.apache.dubbo.config.annotation.DubboReference;
+import org.apache.dubbo.config.annotation.Method;
 import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
+import org.apache.dubbo.springboot.demo.CallBack;
 import org.apache.dubbo.springboot.demo.DemoService;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -30,18 +33,28 @@ import org.springframework.stereotype.Service;
 @EnableDubbo
 public class ConsumerApplication {
 
-    @DubboReference
+    @DubboReference(methods = {@Method(name="sayHelloCallback",arguments = {@Argument(index = 0,callback=true,type="string")})},connections = 1,callbacks = 2)
     private DemoService demoService;
 
     public static void main(String[] args) {
 
         ConfigurableApplicationContext context = SpringApplication.run(ConsumerApplication.class, args);
         ConsumerApplication application = context.getBean(ConsumerApplication.class);
-        String result = application.doSayHello("world");
+        String result = application.doSayHello2("world");
         System.out.println("result: " + result);
     }
 
-    public String doSayHello(String name) {
-        return demoService.sayHello(name);
+//    public String doSayHello(String name) {
+//        return demoService.sayHello(name);
+//    }
+
+
+    public String doSayHello2(String name) {
+        return demoService.sayHelloCallback(new CallBack() {
+            @Override
+            public String call(String text) {
+                return "好好好好好好好好哈哈哈哈哈哈哈哈哈,"+text;
+            }
+        });
     }
 }
