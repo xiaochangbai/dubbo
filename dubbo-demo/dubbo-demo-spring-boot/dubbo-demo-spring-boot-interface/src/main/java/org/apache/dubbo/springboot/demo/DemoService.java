@@ -27,6 +27,6 @@ public interface DemoService {
 //    }
 
 
-    String sayHelloCallback(CallBack callBack);
+    String sayHelloCallback(String text,CallBack callBack);
 
 }

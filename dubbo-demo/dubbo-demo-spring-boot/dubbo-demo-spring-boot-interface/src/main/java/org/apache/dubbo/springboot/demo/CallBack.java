@@ -2,8 +2,8 @@ package org.apache.dubbo.springboot.demo;
 
 import java.io.Serializable;
 
-public interface CallBack extends Serializable {
+public interface CallBack {
 
-    String call(String text);
+    void call(String text);
 
 }

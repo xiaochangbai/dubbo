@@ -17,6 +17,7 @@
 
 package org.apache.dubbo.springboot.demo.consumer;
 
+import java.io.IOException;
 import org.apache.dubbo.config.annotation.Argument;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.annotation.Method;
@@ -36,25 +37,19 @@ public class ConsumerApplication {
     @DubboReference(methods = {@Method(name="sayHelloCallback",arguments = {@Argument(index = 0,callback=true,type="string")})},connections = 1,callbacks = 2)
     private DemoService demoService;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
 
         ConfigurableApplicationContext context = SpringApplication.run(ConsumerApplication.class, args);
         ConsumerApplication application = context.getBean(ConsumerApplication.class);
-        String result = application.doSayHello2("world");
+        String result = application.doSayHello2("sucess");
         System.out.println("result: " + result);
+        System.in.read();
     }
 
-//    public String doSayHello(String name) {
-//        return demoService.sayHello(name);
-//    }
 
-
-    public String doSayHello2(String name) {
-        return demoService.sayHelloCallback(new CallBack() {
-            @Override
-            public String call(String text) {
-                return "好好好好好好好好哈哈哈哈哈哈哈哈哈,"+text;
-            }
+    public String doSayHello2(String msg) {
+        return demoService.sayHelloCallback(msg,result->{
+            System.out.println("collbak context:"+result);
         });
     }
 }

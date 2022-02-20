@@ -17,24 +17,34 @@
 package org.apache.dubbo.springboot.demo.provider;
 
 
+import org.apache.dubbo.config.annotation.Argument;
 import org.apache.dubbo.config.annotation.DubboService;
+import org.apache.dubbo.config.annotation.Method;
 import org.apache.dubbo.rpc.RpcContext;
 import org.apache.dubbo.springboot.demo.CallBack;
 import org.apache.dubbo.springboot.demo.DemoService;
 
-@DubboService
+@DubboService(methods = {@Method(name = "sayHelloCallback",arguments = {@Argument(callback = true,index = 1)})})
 public class DemoServiceImpl implements DemoService {
 
-//    @Override
-//    public String sayHello(String name) {
-//        System.out.println("Hello " + name + ", request from consumer: " + RpcContext.getContext().getRemoteAddress());
-//        return "Hello " + name;
-//    }
 
     @Override
-    public String sayHelloCallback(CallBack callBack) {
-        String call = callBack.call("aaa");
-        return "肖："+call;
+    public String sayHelloCallback(String msg,CallBack callBack) {
+        new Thread(()->{
+            for (int i=0;i<10;i++){
+                try {
+                    Thread.sleep(1000);
+                    if("success".equals(msg)){
+                        callBack.call("ok");
+                    }else{
+                        callBack.call("fail");
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+        return "result："+msg;
     }
 
 
