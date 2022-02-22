@@ -59,8 +59,7 @@ public class Application {
 
         ProtocolConfig protocol = new ProtocolConfig();
         protocol.setName("dubbo");
-        protocol.setPort(12690);
-        protocol.setHost("0.0.0.0");
+        protocol.setPort(-1);
         service.setProtocol(protocol);
 
         //dubbo admin

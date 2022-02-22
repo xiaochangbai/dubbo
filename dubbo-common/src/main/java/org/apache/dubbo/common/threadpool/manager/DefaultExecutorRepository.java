@@ -212,6 +212,7 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
 
     @Override
     public ScheduledExecutorService getServiceExportExecutor() {
+        //todo：tag:可优化，双重检查
         synchronized (LOCK) {
             if (serviceExportExecutor == null) {
                 int coreSize = getExportThreadNum();

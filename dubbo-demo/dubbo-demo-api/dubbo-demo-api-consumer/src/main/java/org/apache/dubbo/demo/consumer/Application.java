@@ -27,7 +27,6 @@ import java.io.IOException;
 public class Application {
     public static void main(String[] args) throws IOException {
         runWithRefer();
-        System.in.read();
     }
 
     private static boolean isClassic(String[] args) {

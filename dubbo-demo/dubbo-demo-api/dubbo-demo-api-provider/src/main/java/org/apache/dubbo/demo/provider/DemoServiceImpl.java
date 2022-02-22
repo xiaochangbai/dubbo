@@ -30,6 +30,11 @@ public class DemoServiceImpl implements DemoService {
     @Override
     public String sayHello(String name) {
         logger.info("Hello " + name + ", request from consumer: " + RpcContext.getServiceContext().getRemoteAddress());
+        try {
+            Thread.sleep(1000*2);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         return "Hello " + name + ", response from provider: " + RpcContext.getServiceContext().getLocalAddress();
     }
 
