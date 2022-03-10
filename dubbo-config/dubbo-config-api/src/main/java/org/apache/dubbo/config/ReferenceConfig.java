@@ -80,6 +80,7 @@ import static org.apache.dubbo.common.utils.StringUtils.splitToSet;
 import static org.apache.dubbo.config.Constants.DUBBO_IP_TO_REGISTRY;
 import static org.apache.dubbo.registry.Constants.CONSUMER_PROTOCOL;
 import static org.apache.dubbo.registry.Constants.REGISTER_IP_KEY;
+import static org.apache.dubbo.rpc.Constants.GENERIC_KEY;
 import static org.apache.dubbo.rpc.Constants.LOCAL_PROTOCOL;
 import static org.apache.dubbo.rpc.cluster.Constants.PEER_KEY;
 import static org.apache.dubbo.rpc.cluster.Constants.REFER_KEY;
@@ -289,7 +290,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
     private void initServiceAppsMapping(Map<String, String> referenceParameters) {
         ServiceNameMapping serviceNameMapping = ServiceNameMapping.getDefaultExtension(getScopeModel());
         URL url = new ServiceConfigURL(LOCAL_PROTOCOL, LOCALHOST_VALUE, 0, interfaceName, referenceParameters);
-        serviceNameMapping.getServices(url);
+        serviceNameMapping.initInterfaceAppMapping(url);
     }
 
     /**
@@ -396,14 +397,16 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         }
 
         if (logger.isInfoEnabled()) {
-            logger.info("Referred dubbo service " + interfaceClass.getName());
+            logger.info("Referred dubbo service: [" + referenceParameters.get(INTERFACE_KEY) + "]." +
+                (Boolean.parseBoolean(referenceParameters.get(GENERIC_KEY)) ?
+                    " it's GenericService reference" : " it's not GenericService reference"));
         }
 
         URL consumerUrl = new ServiceConfigURL(CONSUMER_PROTOCOL, referenceParameters.get(REGISTER_IP_KEY), 0,
             referenceParameters.get(INTERFACE_KEY), referenceParameters);
         consumerUrl = consumerUrl.setScopeModel(getScopeModel());
         consumerUrl = consumerUrl.setServiceModel(consumerModel);
-        MetadataUtils.publishServiceDefinition(interfaceName, consumerUrl, getScopeModel(), getApplicationModel());
+        MetadataUtils.publishServiceDefinition(consumerUrl, consumerModel.getServiceModel(), getApplicationModel());
 
         // create service proxy
         return (T) proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));
@@ -488,7 +491,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         if (urls.size() == 1) {
             URL curUrl = urls.get(0);
             invoker = protocolSPI.refer(interfaceClass, curUrl);
-            if (!UrlUtils.isRegistry(curUrl)){
+            if (!UrlUtils.isRegistry(curUrl)) {
                 List<Invoker<?>> invokers = new ArrayList<>();
                 invokers.add(invoker);
                 invoker = Cluster.getCluster(scopeModel, Cluster.DEFAULT).join(new StaticDirectory(curUrl, invokers), true);
@@ -570,7 +573,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                     interfaceClass = Class.forName(interfaceName, true, getInterfaceClassLoader());
                 } else if (interfaceClass == null) {
                     interfaceClass = Class.forName(interfaceName, true, Thread.currentThread()
-                            .getContextClassLoader());
+                        .getContextClassLoader());
                 }
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException(e.getMessage(), e);
