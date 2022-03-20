@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.alibaba.dubbo.config.annotation;
 
 import java.lang.annotation.Documented;
@@ -23,11 +24,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Service
- *
- * @export
- */
+@Deprecated
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
@@ -50,13 +47,13 @@ public @interface Service {
 
     boolean deprecated() default false;
 
-    boolean dynamic() default false;
+    boolean dynamic() default true;
 
     String accesslog() default "";
 
     int executes() default 0;
 
-    boolean register() default true;
+    boolean register() default false;
 
     int weight() default 0;
 
@@ -119,9 +116,5 @@ public @interface Service {
     String monitor() default "";
 
     String[] registry() default {};
-
-    String tag() default "";
-
-    Method[] methods() default {};
 
 }

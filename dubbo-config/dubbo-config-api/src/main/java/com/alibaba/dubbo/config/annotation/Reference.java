@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.alibaba.dubbo.config.annotation;
 
 import java.lang.annotation.Documented;
@@ -22,11 +23,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Reference
- *
- * @export
- */
+@Deprecated
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.FIELD, ElementType.METHOD, ElementType.ANNOTATION_TYPE})
@@ -46,7 +43,7 @@ public @interface Reference {
 
     boolean generic() default false;
 
-    boolean injvm() default false;
+    boolean injvm() default true;
 
     boolean check() default true;
 
@@ -112,14 +109,5 @@ public @interface Reference {
 
     String[] registry() default {};
 
-    /**
-     * The communication protocol of Dubbo Service
-     *
-     * @return the default value is ""
-     * @since 2.6.6
-     */
-    String protocol() default "";  
-  
-    Method[] methods() default {};
-
 }
+
