@@ -26,19 +26,24 @@ import org.apache.dubbo.rpc.RpcException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.Consumes;
+import javax.ws.rs.GET;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.MediaType;
+
 //@Service(methods = {@Method(name = "say", timeout = 3000)})
-@Service(version = "1.0.1", group = "tulings")
+
+@Service(version = "1.0.1", group = "tulings",protocol = "p1")
 public class DemoServiceImpl implements DemoService {
     private static final Logger logger = LoggerFactory.getLogger(DemoServiceImpl.class);
 
-    @Override
+
     public String sayHello(String name) {
         logger.info("Hello " + name + ", request from consumer: " + RpcContext.getContext().getRemoteAddress());
-
-        throw new RpcException();
-//        throw new NullPointerException();
-//        throw new UserException();
-//        return "Hello " + name + ", response from provider: " + RpcContext.getContext().getLocalAddress();
+        return "Hello " + name + ", response from provider: " + RpcContext.getContext().getLocalAddress();
     }
 
 }
