@@ -19,18 +19,22 @@ package org.apache.dubbo.rpc.protocol.tri.transport;
 
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.rpc.protocol.tri.RpcStatus;
+import org.apache.dubbo.rpc.TriRpcStatus;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http2.Http2DataFrame;
+import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2GoAwayFrame;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
 import io.netty.handler.codec.http2.Http2ResetFrame;
 import io.netty.handler.codec.http2.Http2StreamFrame;
 
-public final class TripleHttp2ClientResponseHandler extends SimpleChannelInboundHandler<Http2StreamFrame> {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TripleHttp2ClientResponseHandler.class);
+public final class TripleHttp2ClientResponseHandler extends
+    SimpleChannelInboundHandler<Http2StreamFrame> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+        TripleHttp2ClientResponseHandler.class);
     private final H2TransportListener transportListener;
 
     public TripleHttp2ClientResponseHandler(H2TransportListener listener) {
@@ -45,7 +49,8 @@ public final class TripleHttp2ClientResponseHandler extends SimpleChannelInbound
             Http2GoAwayFrame event = (Http2GoAwayFrame) evt;
             ctx.close();
             LOGGER.debug(
-                "Event triggered, event name is: " + event.name() + ", last stream id is: " + event.lastStreamId());
+                "Event triggered, event name is: " + event.name() + ", last stream id is: "
+                    + event.lastStreamId());
         } else if (evt instanceof Http2ResetFrame) {
             onResetRead(ctx, (Http2ResetFrame) evt);
         }
@@ -66,16 +71,17 @@ public final class TripleHttp2ClientResponseHandler extends SimpleChannelInbound
 
     private void onResetRead(ChannelHandlerContext ctx, Http2ResetFrame resetFrame) {
         LOGGER.warn("Triple Client received remote reset errorCode=" + resetFrame.errorCode());
-        transportListener.cancelByRemote(RpcStatus.CANCELLED);
+        transportListener.cancelByRemote(resetFrame.errorCode());
         ctx.close();
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        final RpcStatus status = RpcStatus.INTERNAL
+        final TriRpcStatus status = TriRpcStatus.INTERNAL
             .withCause(cause);
-        LOGGER.warn("Meet Exception on ClientResponseHandler, status code is: " + status.code, cause);
-        transportListener.cancelByRemote(status);
+        LOGGER.warn("Meet Exception on ClientResponseHandler, status code is: " + status.code,
+            cause);
+        transportListener.cancelByRemote(Http2Error.INTERNAL_ERROR.code());
         ctx.close();
     }
 

@@ -20,7 +20,7 @@ import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.URLBuilder;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.common.threadpool.manager.ExecutorRepository;
+import org.apache.dubbo.common.threadpool.manager.FrameworkExecutorRepository;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.ConcurrentHashSet;
 import org.apache.dubbo.common.utils.StringUtils;
@@ -49,7 +49,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -63,7 +62,7 @@ import static org.apache.dubbo.registry.client.metadata.ServiceInstanceMetadataU
 
 /**
  * TODO, refactor to move revision-metadata mapping to ServiceDiscovery. Instances should have already been mapped with metadata when reached here.
- *
+ * <p>
  * The operations of ServiceInstancesChangedListener should be synchronized.
  */
 public class ServiceInstancesChangedListener {
@@ -98,7 +97,7 @@ public class ServiceInstancesChangedListener {
         this.serviceUrls = new HashMap<>();
         retryPermission = new Semaphore(1);
         this.scheduler = ScopeModelUtil.getApplicationModel(serviceDiscovery == null || serviceDiscovery.getUrl() == null ? null : serviceDiscovery.getUrl().getScopeModel())
-            .getExtensionLoader(ExecutorRepository.class).getDefaultExtension().getMetadataRetryExecutor();
+            .getBeanFactory().getBean(FrameworkExecutorRepository.class).getMetadataRetryExecutor();
     }
 
     /**
@@ -114,7 +113,6 @@ public class ServiceInstancesChangedListener {
     }
 
     /**
-     *
      * @param event
      */
     private synchronized void doOnEvent(ServiceInstancesChangedEvent event) {
@@ -151,8 +149,7 @@ public class ServiceInstancesChangedListener {
         for (Map.Entry<String, List<ServiceInstance>> entry : revisionToInstances.entrySet()) {
             String revision = entry.getKey();
             List<ServiceInstance> subInstances = entry.getValue();
-            ServiceInstance instance = selectInstance(subInstances);
-            MetadataInfo metadata = serviceDiscovery.getRemoteMetadata(revision, instance);
+            MetadataInfo metadata = serviceDiscovery.getRemoteMetadata(revision, subInstances);
             parseMetadata(revision, metadata, localServiceToRevisions);
             // update metadata into each instance, in case new instance created.
             for (ServiceInstance tmpInstance : subInstances) {
@@ -360,13 +357,6 @@ public class ServiceInstancesChangedListener {
         }
 
         return localServiceToRevisions;
-    }
-
-    private ServiceInstance selectInstance(List<ServiceInstance> instances) {
-        if (instances.size() == 1) {
-            return instances.get(0);
-        }
-        return instances.get(ThreadLocalRandom.current().nextInt(0, instances.size()));
     }
 
     protected Object getServiceUrlsCache(Map<String, List<ServiceInstance>> revisionToInstances, Set<String> revisions, String protocol) {

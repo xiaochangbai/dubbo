@@ -21,30 +21,32 @@ import org.apache.dubbo.rpc.protocol.tri.CancelableStreamObserver;
 import org.apache.dubbo.rpc.protocol.tri.ClientStreamObserver;
 import org.apache.dubbo.rpc.protocol.tri.call.ClientCall;
 
-public class ClientCallToObserverAdapter<T> extends CancelableStreamObserver<T> implements ClientStreamObserver<T> {
+public class ClientCallToObserverAdapter<T> extends CancelableStreamObserver<T> implements
+    ClientStreamObserver<T> {
+
     private final ClientCall call;
     private boolean terminated;
-    private boolean autoRequestEnabled = true;
 
     public ClientCallToObserverAdapter(ClientCall call) {
         this.call = call;
     }
 
     public boolean isAutoRequestEnabled() {
-        return autoRequestEnabled;
+        return call.isAutoRequest();
     }
 
     @Override
     public void onNext(Object data) {
         if (terminated) {
-            throw new IllegalStateException("Stream observer has been terminated, no more data is allowed");
+            throw new IllegalStateException(
+                "Stream observer has been terminated, no more data is allowed");
         }
         call.sendMessage(data);
     }
 
     @Override
     public void onError(Throwable throwable) {
-        call.cancel(null, throwable);
+        call.cancelByLocal(throwable);
         this.terminated = true;
     }
 
@@ -59,7 +61,7 @@ public class ClientCallToObserverAdapter<T> extends CancelableStreamObserver<T> 
 
     @Override
     public void cancel(Throwable throwable) {
-        call.cancel("Canceled by app ", throwable);
+        call.cancelByLocal(throwable);
         this.terminated = true;
     }
 
@@ -70,11 +72,11 @@ public class ClientCallToObserverAdapter<T> extends CancelableStreamObserver<T> 
 
     @Override
     public void request(int count) {
-        call.requestN(count);
+        call.request(count);
     }
 
     @Override
     public void disableAutoRequest() {
-        autoRequestEnabled = false;
+        call.setAutoRequest(false);
     }
 }

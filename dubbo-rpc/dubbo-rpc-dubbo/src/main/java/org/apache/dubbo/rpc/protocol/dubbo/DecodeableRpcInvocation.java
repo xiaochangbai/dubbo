@@ -210,14 +210,7 @@ public class DecodeableRpcInvocation extends RpcInvocation implements Codec, Dec
 
                 args = new Object[pts.length];
                 for (int i = 0; i < args.length; i++) {
-                    try {
-                        //依次读取方法参数值
-                        args[i] = in.readObject(pts[i]);
-                    } catch (Exception e) {
-                        if (log.isWarnEnabled()) {
-                            log.warn("Decode argument failed: " + e.getMessage(), e);
-                        }
-                    }
+                    args[i] = in.readObject(pts[i]);
                 }
             }
             setParameterTypes(pts);
@@ -234,7 +227,6 @@ public class DecodeableRpcInvocation extends RpcInvocation implements Codec, Dec
             }
 
             //decode argument ,may be callback
-            //处理异步参数回调，如果有则在服务端创建reference代理实例
             for (int i = 0; i < args.length; i++) {
                 args[i] = callbackServiceCodec.decodeInvocationArgument(channel, this, pts, i, args[i]);
             }
