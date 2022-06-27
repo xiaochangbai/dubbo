@@ -35,6 +35,9 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static org.apache.dubbo.common.constants.CommonConstants.APPLICATION_KEY;
@@ -74,6 +77,8 @@ public class RpcInvocation implements Invocation, Serializable {
      */
     private Map<String, Object> attachments;
 
+    private transient Lock attachmentLock = new ReentrantLock();
+
     /**
      * Only used on the caller side, will not appear on the wire.
      */
@@ -87,13 +92,33 @@ public class RpcInvocation implements Invocation, Serializable {
 
     private transient InvokeMode invokeMode;
 
+    /**
+     * @deprecated only for test
+     */
+    @Deprecated
     public RpcInvocation() {
     }
 
+    /**
+     * Deep clone of an invocation
+     *
+     * @param invocation original invocation
+     */
+    public RpcInvocation(Invocation invocation) {
+        this(invocation, null);
+    }
+
+    /**
+     * Deep clone of an invocation & put some service params into attachment from invoker (will not change the invoker in invocation)
+     *
+     * @param invocation original invocation
+     * @param invoker target invoker
+     */
     public RpcInvocation(Invocation invocation, Invoker<?> invoker) {
-        this(invocation.getServiceModel(), invocation.getMethodName(), invocation.getServiceName(), invocation.getProtocolServiceKey(),
-                invocation.getParameterTypes(), invocation.getArguments(), new HashMap<>(invocation.getObjectAttachments()),
-                invocation.getInvoker(), invocation.getAttributes());
+        this(invocation.getTargetServiceUniqueName(), invocation.getServiceModel(), invocation.getMethodName(), invocation.getServiceName(),
+            invocation.getProtocolServiceKey(), invocation.getParameterTypes(), invocation.getArguments(),
+            invocation.copyObjectAttachments(), invocation.getInvoker(), invocation.getAttributes(),
+            invocation instanceof RpcInvocation ? ((RpcInvocation) invocation).getInvokeMode() : null);
         if (invoker != null) {
             URL url = invoker.getUrl();
             setAttachment(PATH_KEY, url.getPath());
@@ -116,65 +141,103 @@ public class RpcInvocation implements Invocation, Serializable {
                 setAttachment(APPLICATION_KEY, url.getApplication());
             }
         }
-        this.targetServiceUniqueName = invocation.getTargetServiceUniqueName();
-        this.protocolServiceKey = invocation.getProtocolServiceKey();
     }
 
-    public RpcInvocation(Invocation invocation) {
-        this(invocation.getServiceModel(), invocation.getMethodName(), invocation.getServiceName(), invocation.getProtocolServiceKey(), invocation.getParameterTypes(),
-                invocation.getArguments(), invocation.getObjectAttachments(), invocation.getInvoker(), invocation.getAttributes());
-        this.targetServiceUniqueName = invocation.getTargetServiceUniqueName();
+    /**
+     * To create a brand-new invocation
+     */
+    public RpcInvocation(ServiceModel serviceModel, String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments) {
+        this(null, serviceModel, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, null, null, null, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
+    @Deprecated
     public RpcInvocation(ServiceModel serviceModel, Method method, String interfaceName, String protocolServiceKey, Object[] arguments) {
-        this(serviceModel, method, interfaceName, protocolServiceKey, arguments, null, null);
+        this(null, serviceModel, method.getName(), interfaceName, protocolServiceKey, method.getParameterTypes(), arguments, null, null, null, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
     @Deprecated
     public RpcInvocation(Method method, String interfaceName, String protocolServiceKey, Object[] arguments) {
-        this(null, method, interfaceName, protocolServiceKey, arguments, null, null);
+        this(null, null, method.getName(), interfaceName, protocolServiceKey, method.getParameterTypes(), arguments, null, null, null, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
+    @Deprecated
     public RpcInvocation(ServiceModel serviceModel, Method method, String interfaceName, String protocolServiceKey, Object[] arguments, Map<String, Object> attachment, Map<Object, Object> attributes) {
-        this(null, serviceModel, method.getName(), interfaceName, protocolServiceKey, method.getParameterTypes(), arguments, attachment, null, attributes);
+        this(null, serviceModel, method.getName(), interfaceName, protocolServiceKey, method.getParameterTypes(), arguments, attachment, null, attributes, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
     @Deprecated
     public RpcInvocation(Method method, String interfaceName, String protocolServiceKey, Object[] arguments, Map<String, Object> attachment, Map<Object, Object> attributes) {
-        this(null, null, method.getName(), interfaceName, protocolServiceKey, method.getParameterTypes(), arguments, attachment, null, attributes);
+        this(null, null, method.getName(), interfaceName, protocolServiceKey, method.getParameterTypes(), arguments, attachment, null, attributes, null);
     }
 
-    public RpcInvocation(ServiceModel serviceModel, String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments) {
-        this(null, serviceModel, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, null, null, null);
-    }
-
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
     @Deprecated
     public RpcInvocation(String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments) {
-        this(null, null, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, null, null, null);
+        this(null, null, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, null, null, null, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
+    @Deprecated
     public RpcInvocation(ServiceModel serviceModel, String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments, Map<String, Object> attachments) {
-        this(null, serviceModel, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, null, null);
+        this(null, serviceModel, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, null, null, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
     @Deprecated
     public RpcInvocation(String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments, Map<String, Object> attachments) {
-        this(null, null, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, null, null);
+        this(null, null, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, null, null, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
     @Deprecated
     public RpcInvocation(String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments,
                          Map<String, Object> attachments, Invoker<?> invoker, Map<Object, Object> attributes) {
-        this(null, null, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, invoker, attributes);
+        this(null, null, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, invoker, attributes, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
+    @Deprecated
     public RpcInvocation(ServiceModel serviceModel, String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments,
                          Map<String, Object> attachments, Invoker<?> invoker, Map<Object, Object> attributes) {
-        this(null, serviceModel, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, invoker, attributes);
+        this(null, serviceModel, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, invoker, attributes, null);
     }
 
+    /**
+     * @deprecated deprecated, will be removed in 3.1.x
+     */
+    @Deprecated
+    public RpcInvocation(ServiceModel serviceModel, String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments,
+                         Map<String, Object> attachments, Invoker<?> invoker, Map<Object, Object> attributes, InvokeMode invokeMode) {
+        this(null, serviceModel, methodName, interfaceName, protocolServiceKey, parameterTypes, arguments, attachments, invoker, attributes, invokeMode);
+    }
+
+    /**
+     * To create a brand-new invocation
+     */
     public RpcInvocation(String targetServiceUniqueName, ServiceModel serviceModel, String methodName, String interfaceName, String protocolServiceKey, Class<?>[] parameterTypes, Object[] arguments,
-                         Map<String, Object> attachments, Invoker<?> invoker, Map<Object, Object> attributes) {
+                         Map<String, Object> attachments, Invoker<?> invoker, Map<Object, Object> attributes, InvokeMode invokeMode) {
         this.targetServiceUniqueName = targetServiceUniqueName;
         this.serviceModel = serviceModel;
         this.methodName = methodName;
@@ -186,20 +249,21 @@ public class RpcInvocation implements Invocation, Serializable {
         this.attributes = attributes == null ? Collections.synchronizedMap(new HashMap<>()) : attributes;
         this.invoker = invoker;
         initParameterDesc();
+        this.invokeMode = invokeMode;
     }
 
     private void initParameterDesc() {
         AtomicReference<ServiceDescriptor> serviceDescriptor = new AtomicReference<>();
         if (serviceModel != null) {
             serviceDescriptor.set(serviceModel.getServiceModel());
-        } else if (StringUtils.isNotEmpty(interfaceName)){
+        } else if (StringUtils.isNotEmpty(interfaceName)) {
             // TODO: Multi Instance compatible mode
             FrameworkModel.defaultModel()
                 .getServiceRepository()
                 .allProviderModels()
                 .stream()
                 .map(ProviderModel::getServiceModel)
-                .filter(s-> interfaceName.equals(s.getInterfaceName()))
+                .filter(s -> interfaceName.equals(s.getInterfaceName()))
                 .findFirst()
                 .ifPresent(serviceDescriptor::set);
         }
@@ -318,11 +382,46 @@ public class RpcInvocation implements Invocation, Serializable {
 
     @Override
     public Map<String, Object> getObjectAttachments() {
-        return attachments;
+        try {
+            attachmentLock.lock();
+            return attachments;
+        } finally {
+            attachmentLock.unlock();
+        }
+    }
+
+    @Override
+    public Map<String, Object> copyObjectAttachments() {
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                return new HashMap<>();
+            }
+            return new HashMap<>(attachments);
+        } finally {
+            attachmentLock.unlock();
+        }
+    }
+
+    @Override
+    public void foreachAttachment(Consumer<Map.Entry<String, Object>> consumer) {
+        try {
+            attachmentLock.lock();
+            if (attachments != null) {
+                attachments.entrySet().forEach(consumer);
+            }
+        } finally {
+            attachmentLock.unlock();
+        }
     }
 
     public void setObjectAttachments(Map<String, Object> attachments) {
-        this.attachments = attachments == null ? new HashMap<>() : attachments;
+        try {
+            attachmentLock.lock();
+            this.attachments = attachments == null ? new HashMap<>() : attachments;
+        } finally {
+            attachmentLock.unlock();
+        }
     }
 
     @Override
@@ -333,12 +432,22 @@ public class RpcInvocation implements Invocation, Serializable {
     @Deprecated
     @Override
     public Map<String, String> getAttachments() {
-        return new AttachmentsAdapter.ObjectToStringMap(attachments);
+        try {
+            attachmentLock.lock();
+            return new AttachmentsAdapter.ObjectToStringMap(attachments);
+        } finally {
+            attachmentLock.unlock();
+        }
     }
 
     @Deprecated
     public void setAttachments(Map<String, String> attachments) {
-        this.attachments = attachments == null ? new HashMap<>() : new HashMap<>(attachments);
+        try {
+            attachmentLock.lock();
+            this.attachments = attachments == null ? new HashMap<>() : new HashMap<>(attachments);
+        } finally {
+            attachmentLock.unlock();
+        }
     }
 
     @Override
@@ -348,10 +457,15 @@ public class RpcInvocation implements Invocation, Serializable {
 
     @Override
     public void setObjectAttachment(String key, Object value) {
-        if (attachments == null) {
-            attachments = new HashMap<>();
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                attachments = new HashMap<>();
+            }
+            attachments.put(key, value);
+        } finally {
+            attachmentLock.unlock();
         }
-        attachments.put(key, value);
     }
 
     @Override
@@ -366,33 +480,48 @@ public class RpcInvocation implements Invocation, Serializable {
 
     @Override
     public void setObjectAttachmentIfAbsent(String key, Object value) {
-        if (attachments == null) {
-            attachments = new HashMap<>();
-        }
-        if (!attachments.containsKey(key)) {
-            attachments.put(key, value);
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                attachments = new HashMap<>();
+            }
+            if (!attachments.containsKey(key)) {
+                attachments.put(key, value);
+            }
+        } finally {
+            attachmentLock.unlock();
         }
     }
 
     @Deprecated
     public void addAttachments(Map<String, String> attachments) {
-        if (attachments == null) {
-            return;
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                return;
+            }
+            if (this.attachments == null) {
+                this.attachments = new HashMap<>();
+            }
+            this.attachments.putAll(attachments);
+        } finally {
+            attachmentLock.unlock();
         }
-        if (this.attachments == null) {
-            this.attachments = new HashMap<>();
-        }
-        this.attachments.putAll(attachments);
     }
 
     public void addObjectAttachments(Map<String, Object> attachments) {
-        if (attachments == null) {
-            return;
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                return;
+            }
+            if (this.attachments == null) {
+                this.attachments = new HashMap<>();
+            }
+            this.attachments.putAll(attachments);
+        } finally {
+            attachmentLock.unlock();
         }
-        if (this.attachments == null) {
-            this.attachments = new HashMap<>();
-        }
-        this.attachments.putAll(attachments);
     }
 
     @Deprecated
@@ -417,65 +546,90 @@ public class RpcInvocation implements Invocation, Serializable {
     @Override
     @Deprecated
     public String getAttachment(String key) {
-        if (attachments == null) {
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                return null;
+            }
+            Object value = attachments.get(key);
+            if (value instanceof String) {
+                return (String) value;
+            }
             return null;
+        } finally {
+            attachmentLock.unlock();
         }
-        Object value = attachments.get(key);
-        if (value instanceof String) {
-            return (String) value;
-        }
-        return null;
     }
 
     @Override
     public Object getObjectAttachment(String key) {
-        if (attachments == null) {
-            return null;
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                return null;
+            }
+            final Object val = attachments.get(key);
+            if (val != null) {
+                return val;
+            }
+            return attachments.get(key.toLowerCase(Locale.ROOT));
+        } finally {
+            attachmentLock.unlock();
         }
-        final Object val = attachments.get(key);
-        if (val != null) {
-            return val;
-        }
-        return attachments.get(key.toLowerCase(Locale.ROOT));
     }
 
     @Override
     @Deprecated
     public String getAttachment(String key, String defaultValue) {
-        if (attachments == null) {
-            return defaultValue;
-        }
-        Object value = attachments.get(key);
-        if (value instanceof String) {
-            String strValue = (String) value;
-            if (StringUtils.isEmpty(strValue)) {
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
                 return defaultValue;
-            } else {
-                return strValue;
             }
+            Object value = attachments.get(key);
+            if (value instanceof String) {
+                String strValue = (String) value;
+                if (StringUtils.isEmpty(strValue)) {
+                    return defaultValue;
+                } else {
+                    return strValue;
+                }
+            }
+            return defaultValue;
+        } finally {
+            attachmentLock.unlock();
         }
-        return null;
     }
 
     @Deprecated
     @Override
     public Object getObjectAttachment(String key, Object defaultValue) {
-        if (attachments == null) {
-            return defaultValue;
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                return defaultValue;
+            }
+            Object value = attachments.get(key);
+            if (value == null) {
+                return defaultValue;
+            }
+            return value;
+        } finally {
+            attachmentLock.unlock();
         }
-        Object value = attachments.get(key);
-        if (value == null) {
-            return defaultValue;
-        }
-        return value;
     }
 
     @Override
     public Object getObjectAttachmentWithoutConvert(String key) {
-        if (attachments == null) {
-            return null;
+        try {
+            attachmentLock.lock();
+            if (attachments == null) {
+                return null;
+            }
+            return attachments.get(key);
+        } finally {
+            attachmentLock.unlock();
         }
-        return attachments.get(key);
     }
 
     public Class<?> getReturnType() {
@@ -515,8 +669,8 @@ public class RpcInvocation implements Invocation, Serializable {
     @Override
     public String toString() {
         return "RpcInvocation [methodName=" + methodName + ", parameterTypes="
-                + Arrays.toString(parameterTypes) + ", arguments=" + Arrays.toString(arguments)
-                + ", attachments=" + attachments + "]";
+            + Arrays.toString(parameterTypes) + ", arguments=" + Arrays.toString(arguments)
+            + ", attachments=" + attachments + "]";
     }
 
 }
