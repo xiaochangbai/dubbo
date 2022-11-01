@@ -21,7 +21,6 @@ import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.rpc.model.ScopeModel;
 
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -36,7 +35,7 @@ public class MappingCacheManager extends AbstractCacheManager<Set<String>> {
         return scopeModel.getBeanFactory().getOrRegisterBean(MappingCacheManager.class);
     }
 
-    public MappingCacheManager(String name, ScheduledExecutorService executorService) {
+    public MappingCacheManager(boolean enableFileCache, String name, ScheduledExecutorService executorService) {
         String filePath = System.getProperty("dubbo.mapping.cache.filePath");
         String fileName = System.getProperty("dubbo.mapping.cache.fileName");
         if (StringUtils.isEmpty(fileName)) {
@@ -54,7 +53,7 @@ public class MappingCacheManager extends AbstractCacheManager<Set<String>> {
         String rawMaxFileSize = System.getProperty("dubbo.mapping.cache.maxFileSize");
         long maxFileSize = StringUtils.parseLong(rawMaxFileSize);
 
-        init(filePath, fileName, entrySize,  maxFileSize, 50, executorService);
+        init(enableFileCache, filePath, fileName, entrySize,  maxFileSize, 50, executorService);
     }
 
     @Override
@@ -65,11 +64,5 @@ public class MappingCacheManager extends AbstractCacheManager<Set<String>> {
     @Override
     protected String getName() {
         return "mapping";
-    }
-
-    public void update(Map<String, Set<String>> newCache) {
-        for (Map.Entry<String, Set<String>> entry : newCache.entrySet()) {
-            cache.put(entry.getKey(), entry.getValue());
-        }
     }
 }

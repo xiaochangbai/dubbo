@@ -22,7 +22,7 @@ import org.apache.dubbo.common.config.Environment;
 import org.apache.dubbo.common.config.InmemoryConfiguration;
 import org.apache.dubbo.common.constants.CommonConstants;
 import org.apache.dubbo.common.extension.ExtensionLoader;
-import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.ClassUtils;
 import org.apache.dubbo.common.utils.CollectionUtils;
@@ -52,7 +52,6 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +60,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.COMMON_FAILED_OVERRIDE_FIELD;
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.COMMON_FAILED_REFLECT;
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.COMMON_UNEXPECTED_EXCEPTION;
 import static org.apache.dubbo.common.utils.ClassUtils.isSimpleType;
 import static org.apache.dubbo.common.utils.ReflectUtils.findMethodByMethodSignature;
 import static org.apache.dubbo.config.Constants.PARAMETERS;
@@ -72,7 +74,7 @@ import static org.apache.dubbo.config.Constants.PARAMETERS;
  */
 public abstract class AbstractConfig implements Serializable {
 
-    protected static final Logger logger = LoggerFactory.getLogger(AbstractConfig.class);
+    protected static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(AbstractConfig.class);
     private static final long serialVersionUID = 4267533505537413570L;
 
     /**
@@ -160,6 +162,10 @@ public abstract class AbstractConfig implements Serializable {
      */
     public static void appendAttributes(Map<String, String> parameters, Object config) {
         appendParameters0(parameters, config, null, false);
+    }
+
+    public static void appendAttributes(Map<String, String> parameters, Object config, String prefix) {
+        appendParameters0(parameters, config, prefix, false);
     }
 
     private static void appendParameters0(Map<String, String> parameters, Object config, String prefix, boolean asParameters) {
@@ -261,6 +267,10 @@ public abstract class AbstractConfig implements Serializable {
         return "get" + name.substring(0, 1).toUpperCase() + name.substring(1);
     }
 
+    private static String calculatePropertyToSetter(String name) {
+        return "set" + name.substring(0, 1).toUpperCase() + name.substring(1);
+    }
+
     private static String calculatePropertyFromGetter(String name) {
         int i = name.startsWith("get") ? 3 : 2;
         return StringUtils.camelToSplitName(name.substring(i, i + 1).toLowerCase() + name.substring(i + 1), ".");
@@ -356,7 +366,7 @@ public abstract class AbstractConfig implements Serializable {
      */
     protected static Map<String, String> convert(Map<String, String> parameters, String prefix) {
         if (parameters == null || parameters.isEmpty()) {
-            return Collections.emptyMap();
+            return new HashMap<>();
         }
 
         Map<String, String> result = new HashMap<>();
@@ -468,7 +478,7 @@ public abstract class AbstractConfig implements Serializable {
                     if ("interfaceClass".equals(property) || "interfaceName".equals(property)) {
                         property = "interface";
                     }
-                    String setter = "set" + property.substring(0, 1).toUpperCase() + property.substring(1);
+                    String setter = calculatePropertyToSetter(property);
                     Object value = method.invoke(annotation);
                     if (value != null && !value.equals(method.getDefaultValue())) {
                         Class<?> parameterType = ReflectUtils.getBoxedClass(method.getReturnType());
@@ -487,7 +497,7 @@ public abstract class AbstractConfig implements Serializable {
                         }
                     }
                 } catch (Throwable e) {
-                    logger.error(e.getMessage(), e);
+                    logger.error(COMMON_FAILED_REFLECT, "", "", e.getMessage(), e);
                 }
             }
         }
@@ -496,7 +506,7 @@ public abstract class AbstractConfig implements Serializable {
     /**
      * <p>
      * <b>The new instance of the AbstractConfig subclass should return empty metadata.</b>
-     * The purpose is is to get the attributes set by the user instead of the default value when the {@link #refresh()} method handles attribute overrides.
+     * The purpose is to get the attributes set by the user instead of the default value when the {@link #refresh()} method handles attribute overrides.
      * </p>
      *
      * <p><b>The default value of the field should be set in the {@link #checkDefault()} method</b>,
@@ -514,8 +524,12 @@ public abstract class AbstractConfig implements Serializable {
      * @see AbstractConfig#appendParameters(Map, Object, String)
      */
     public Map<String, String> getMetaData() {
+        return getMetaData(null);
+    }
+
+    public Map<String, String> getMetaData(String prefix) {
         Map<String, String> metaData = new HashMap<>();
-        appendAttributes(metaData, this);
+        appendAttributes(metaData, this, prefix);
         return metaData;
     }
 
@@ -594,7 +608,7 @@ public abstract class AbstractConfig implements Serializable {
                     if (overrideAll || oldOne == null) {
                         Object newResult = getterMethod.invoke(newOne);
                         // if new one is non-null and new one is not equals old one
-                        if (newResult != null && Objects.equals(newResult, oldOne)) {
+                        if (newResult != null && !Objects.equals(newResult, oldOne)) {
                             method.invoke(this, newResult);
                         }
                     }
@@ -637,7 +651,7 @@ public abstract class AbstractConfig implements Serializable {
                 }
 
             } catch (Throwable t) {
-                logger.error("Failed to override field value of config bean: " + this, t);
+                logger.error(COMMON_FAILED_OVERRIDE_FIELD, "", "", "Failed to override field value of config bean: " + this, t);
                 throw new IllegalStateException("Failed to override field value of config bean: " + this, t);
             }
         }
@@ -647,7 +661,6 @@ public abstract class AbstractConfig implements Serializable {
      * Dubbo config property override
      */
     public void refresh() {
-        refreshed.set(true);
         try {
             // check and init before do refresh
             preProcessRefresh();
@@ -657,14 +670,15 @@ public abstract class AbstractConfig implements Serializable {
 
             // Search props starts with PREFIX in order
             String preferredPrefix = null;
-            for (String prefix : getPrefixes()) {
+            List<String> prefixes = getPrefixes();
+            for (String prefix : prefixes) {
                 if (ConfigurationUtils.hasSubProperties(configurationMaps, prefix)) {
                     preferredPrefix = prefix;
                     break;
                 }
             }
             if (preferredPrefix == null) {
-                preferredPrefix = getPrefixes().get(0);
+                preferredPrefix = prefixes.get(0);
             }
             // Extract sub props (which key was starts with preferredPrefix)
             Collection<Map<String, String>> instanceConfigMaps = environment.getConfigurationMaps(this, preferredPrefix);
@@ -692,11 +706,12 @@ public abstract class AbstractConfig implements Serializable {
             processExtraRefresh(preferredPrefix, subPropsConfiguration);
 
         } catch (Exception e) {
-            logger.error("Failed to override field value of config bean: " + this, e);
+            logger.error(COMMON_FAILED_OVERRIDE_FIELD, "", "", "Failed to override field value of config bean: " + this, e);
             throw new IllegalStateException("Failed to override field value of config bean: " + this, e);
         }
 
         postProcessRefresh();
+        refreshed.set(true);
     }
 
     private void assignProperties(Object obj, Environment environment, Map<String, String> properties, InmemoryConfiguration configuration) {
@@ -738,6 +753,19 @@ public abstract class AbstractConfig implements Serializable {
             } else if (isParametersSetter(method)) {
                 String propertyName = extractPropertyName(method.getName());
 
+                String value = StringUtils.trim(configuration.getString(propertyName));
+                Map<String, String> parameterMap;
+                if (StringUtils.hasText(value)) {
+                    parameterMap = StringUtils.parseParameters(value);
+                } else {
+                    // in this case, maybe parameters.item3=value3.
+                    parameterMap = ConfigurationUtils.getSubProperties(properties, PARAMETERS);
+                }
+                Map<String, String> newMap = convert(parameterMap, "");
+                if (CollectionUtils.isEmptyMap(newMap)) {
+                    continue;
+                }
+
                 // get old map from original obj
                 Map<String, String> oldMap = null;
                 try {
@@ -750,16 +778,6 @@ public abstract class AbstractConfig implements Serializable {
                 } catch (Exception ignore) {
 
                 }
-
-                String value = StringUtils.trim(configuration.getString(propertyName));
-                Map<String, String> parameterMap;
-                if (StringUtils.hasText(value)) {
-                    parameterMap = StringUtils.parseParameters(value);
-                } else {
-                    // in this case, maybe parameters.item3=value3.
-                    parameterMap = ConfigurationUtils.getSubProperties(properties, PARAMETERS);
-                }
-                Map<String, String> newMap = convert(parameterMap, "");
 
                 // if old map is null, directly set params
                 if (oldMap == null) {
@@ -796,7 +814,7 @@ public abstract class AbstractConfig implements Serializable {
     private boolean isPropertySet(Method[] methods, String propertyName) {
         try {
             String getterName = calculatePropertyToGetter(propertyName);
-            Method getterMethod = findGetMethod(methods,getterName);
+            Method getterMethod = findGetMethod(methods, getterName);
             if (getterMethod == null) {
                 return false;
             }
@@ -823,8 +841,11 @@ public abstract class AbstractConfig implements Serializable {
         if (CollectionUtils.isEmptyMap(values)) {
             return;
         }
-        Map<String, String> map = invokeGetParameters(obj.getClass(), obj);
-        map = map == null ? new HashMap<>() : map;
+        Map<String, String> map = new HashMap<>();
+        Map<String, String> getParametersMap = invokeGetParameters(obj.getClass(), obj);
+        if (getParametersMap != null && !getParametersMap.isEmpty()) {
+            map.putAll(getParametersMap);
+        }
         map.putAll(values);
         invokeSetParameters(obj.getClass(), obj, map);
     }
@@ -914,26 +935,24 @@ public abstract class AbstractConfig implements Serializable {
             buf.append(getTagName(getClass()));
             for (Method method : getAttributedMethods()) {
                 try {
-                    if (MethodUtils.isGetter(method)) {
-                        String name = method.getName();
-                        String key = calculateAttributeFromGetter(name);
-                        Object value = method.invoke(this);
-                        if (value != null) {
-                            buf.append(' ');
-                            buf.append(key);
-                            buf.append("=\"");
-                            buf.append(key.equals("password") ? "******" : value);
-                            buf.append('\"');
-                        }
+                    String name = method.getName();
+                    String key = calculateAttributeFromGetter(name);
+                    Object value = method.invoke(this);
+                    if (value != null) {
+                        buf.append(' ');
+                        buf.append(key);
+                        buf.append("=\"");
+                        buf.append(key.equals("password") ? "******" : value);
+                        buf.append('\"');
                     }
                 } catch (Exception e) {
-                    logger.warn(e.getMessage(), e);
+                    logger.warn(COMMON_UNEXPECTED_EXCEPTION, "", "", e.getMessage(), e);
                 }
             }
             buf.append(" />");
             return buf.toString();
         } catch (Throwable t) {
-            logger.warn(t.getMessage(), t);
+            logger.warn(COMMON_UNEXPECTED_EXCEPTION, "", "", t.getMessage(), t);
             return super.toString();
         }
     }
@@ -1006,7 +1025,7 @@ public abstract class AbstractConfig implements Serializable {
         List<Method> methods = new ArrayList<>(beanInfo.getMethodDescriptors().length);
         for (MethodDescriptor methodDescriptor : beanInfo.getMethodDescriptors()) {
             Method method = methodDescriptor.getMethod();
-            if (MethodUtils.isGetter(method)) {
+            if (MethodUtils.isGetter(method) || isParametersGetter(method)) {
                 // filter non attribute
                 Parameter parameter = method.getAnnotation(Parameter.class);
                 if (parameter != null && !parameter.attribute()) {

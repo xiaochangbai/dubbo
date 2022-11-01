@@ -17,7 +17,7 @@
 package org.apache.dubbo.config.metadata;
 
 import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.StringUtils;
@@ -28,6 +28,7 @@ import org.apache.dubbo.config.ProtocolConfig;
 import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.config.ServiceConfig;
 import org.apache.dubbo.metadata.MetadataService;
+import org.apache.dubbo.registry.client.metadata.MetadataServiceDelegation;
 import org.apache.dubbo.rpc.Protocol;
 import org.apache.dubbo.rpc.ProtocolServer;
 import org.apache.dubbo.rpc.model.ApplicationModel;
@@ -45,13 +46,16 @@ import static org.apache.dubbo.common.constants.CommonConstants.METADATA_SERVICE
 import static org.apache.dubbo.common.constants.CommonConstants.METADATA_SERVICE_PROTOCOL_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.THREADPOOL_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.THREADS_KEY;
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.CONFIG_FAILED_FIND_PROTOCOL;
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.CONFIG_METADATA_SERVICE_EXPORTED;
+import static org.apache.dubbo.remoting.Constants.BIND_PORT_KEY;
 
 /**
  * Export metadata service
  */
 public class ConfigurableMetadataServiceExporter {
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(getClass());
 
     private MetadataServiceDelegation metadataService;
 
@@ -74,7 +78,7 @@ public class ConfigurableMetadataServiceExporter {
             }
         } else {
             if (logger.isWarnEnabled()) {
-                logger.warn("The MetadataService has been exported : " + serviceConfig.getExportedUrls());
+                logger.warn(CONFIG_METADATA_SERVICE_EXPORTED, "", "", "The MetadataService has been exported : " + serviceConfig.getExportedUrls());
             }
         }
 
@@ -97,6 +101,10 @@ public class ConfigurableMetadataServiceExporter {
         return applicationModel.getApplicationConfigManager().getApplication().get();
     }
 
+    private ProtocolConfig getProtocolConfig(String protocol) {
+        return applicationModel.getApplicationConfigManager().getProtocol(protocol).get();
+    }
+
     private ProtocolConfig generateMetadataProtocol() {
         // protocol always defaults to dubbo if not specified
         String specifiedProtocol = getSpecifiedProtocol();
@@ -115,14 +123,25 @@ public class ConfigurableMetadataServiceExporter {
                 Protocol protocol = applicationModel.getExtensionLoader(Protocol.class).getExtension(specifiedProtocol);
                 if (protocol != null && protocol.getServers() != null) {
                     Iterator<ProtocolServer> it = protocol.getServers().iterator();
+                    // metadata service may export before normal service export, it.hasNext() will return false.
+                    // so need use specified protocol port.
                     if (it.hasNext()) {
-                        String addr = it.next().getAddress();
-                        String rawPort = addr.substring(addr.indexOf(":") + 1);
+                        ProtocolServer server = it.next();
+                        String rawPort = server.getUrl().getParameter(BIND_PORT_KEY);
+                        if (rawPort == null) {
+                            String addr = server.getAddress();
+                            rawPort = addr.substring(addr.indexOf(":") + 1);
+                        }
                         protocolConfig.setPort(Integer.parseInt(rawPort));
+                    } else {
+                        Integer protocolPort = getProtocolConfig(specifiedProtocol).getPort();
+                        if (null != protocolPort && protocolPort != -1) {
+                            protocolConfig.setPort(protocolPort);
+                        }
                     }
                 }
             } catch (Exception e) {
-                logger.error("Failed to find any valid " + specifiedProtocol + " protocol, will use random port to export metadata service.");
+                logger.error(CONFIG_FAILED_FIND_PROTOCOL, "invalid specified " + specifiedProtocol + "  protocol", "", "Failed to find any valid protocol, will use random port to export metadata service.", e);
             }
         } else {
             protocolConfig.setPort(port);

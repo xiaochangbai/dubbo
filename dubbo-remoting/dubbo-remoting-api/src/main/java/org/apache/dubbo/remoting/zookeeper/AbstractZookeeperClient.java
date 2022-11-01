@@ -18,7 +18,7 @@ package org.apache.dubbo.remoting.zookeeper;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.config.configcenter.ConfigItem;
-import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.ConcurrentHashSet;
 
@@ -29,9 +29,11 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executor;
 
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.REGISTRY_ZOOKEEPER_EXCEPTION;
+
 public abstract class AbstractZookeeperClient<TargetDataListener, TargetChildListener> implements ZookeeperClient {
 
-    protected static final Logger logger = LoggerFactory.getLogger(AbstractZookeeperClient.class);
+    protected static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(AbstractZookeeperClient.class);
 
     // may hang up to wait name resolution up to 10s
     protected int DEFAULT_CONNECTION_TIMEOUT_MS = 30 * 1000;
@@ -39,13 +41,11 @@ public abstract class AbstractZookeeperClient<TargetDataListener, TargetChildLis
 
     private final URL url;
 
-    private final Set<StateListener> stateListeners = new CopyOnWriteArraySet<StateListener>();
+    private final Set<StateListener> stateListeners = new CopyOnWriteArraySet<>();
 
-    private final ConcurrentMap<String, ConcurrentMap<ChildListener, TargetChildListener>> childListeners =
-            new ConcurrentHashMap<String, ConcurrentMap<ChildListener, TargetChildListener>>();
+    private final ConcurrentMap<String, ConcurrentMap<ChildListener, TargetChildListener>> childListeners = new ConcurrentHashMap<>();
 
-    private final ConcurrentMap<String, ConcurrentMap<DataListener, TargetDataListener>> listeners =
-            new ConcurrentHashMap<String, ConcurrentMap<DataListener, TargetDataListener>>();
+    private final ConcurrentMap<String, ConcurrentMap<DataListener, TargetDataListener>> listeners = new ConcurrentHashMap<>();
 
     private volatile boolean closed = false;
 
@@ -161,7 +161,7 @@ public abstract class AbstractZookeeperClient<TargetDataListener, TargetChildLis
         try {
             doClose();
         } catch (Throwable t) {
-            logger.warn(t.getMessage(), t);
+            logger.warn(REGISTRY_ZOOKEEPER_EXCEPTION, "", "", t.getMessage(), t);
         }
     }
 

@@ -16,8 +16,9 @@
  */
 package org.apache.dubbo.config.context;
 
+import org.apache.dubbo.common.context.ModuleExt;
 import org.apache.dubbo.common.extension.DisableInject;
-import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.config.AbstractConfig;
@@ -45,14 +46,17 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Optional.ofNullable;
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.COMMON_UNEXPECTED_EXCEPTION;
 import static org.apache.dubbo.config.AbstractConfig.getTagName;
 
 /**
  * Manage configs of module
  */
-public class ModuleConfigManager extends AbstractConfigManager {
+public class ModuleConfigManager extends AbstractConfigManager implements ModuleExt {
 
-    private static final Logger logger = LoggerFactory.getLogger(ModuleConfigManager.class);
+    private static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(ModuleConfigManager.class);
+
+    public static final String NAME = "moduleConfig";
 
     private Map<String, AbstractInterfaceConfig> serviceConfigCache = new ConcurrentHashMap<>();
     private final ConfigManager applicationConfigManager;
@@ -199,6 +203,17 @@ public class ModuleConfigManager extends AbstractConfigManager {
         return Optional.empty();
     }
 
+    @Override
+    protected <C extends AbstractConfig> boolean removeIfAbsent(C config, Map<String, C> configsMap) {
+        if (super.removeIfAbsent(config, configsMap)) {
+            if (config instanceof ReferenceConfigBase || config instanceof ServiceConfigBase) {
+                removeInterfaceConfig((AbstractInterfaceConfig) config);
+            }
+            return true;
+        }
+        return false;
+    }
+
     /**
      * check duplicated ReferenceConfig/ServiceConfig
      *
@@ -226,7 +241,7 @@ public class ModuleConfigManager extends AbstractConfigManager {
             if (prevConfig.equals(config)) {
                 // Is there any problem with ignoring duplicate and equivalent but different ReferenceConfig instances?
                 if (logger.isWarnEnabled() && duplicatedConfigs.add(config)) {
-                    logger.warn("Ignore duplicated and equal config: " + config);
+                    logger.warn(COMMON_UNEXPECTED_EXCEPTION, "", "", "Ignore duplicated and equal config: " + config);
                 }
                 return prevConfig;
             }
@@ -238,13 +253,28 @@ public class ModuleConfigManager extends AbstractConfigManager {
                 "If multiple instances are required for the same interface, please use a different group or version.";
 
             if (logger.isWarnEnabled() && duplicatedConfigs.add(config)) {
-                logger.warn(msg);
+                logger.warn(COMMON_UNEXPECTED_EXCEPTION, "", "", msg);
             }
             if (!this.ignoreDuplicatedInterface) {
                 throw new IllegalStateException(msg);
             }
         }
         return prevConfig;
+    }
+
+    private void removeInterfaceConfig(AbstractInterfaceConfig config) {
+        String uniqueServiceName;
+        Map<String, AbstractInterfaceConfig> configCache;
+        if (config instanceof ReferenceConfigBase) {
+            return;
+        } else if (config instanceof ServiceConfigBase) {
+            ServiceConfigBase serviceConfig = (ServiceConfigBase) config;
+            uniqueServiceName = serviceConfig.getUniqueServiceName();
+            configCache = serviceConfigCache;
+        } else {
+            throw new IllegalArgumentException("Illegal type of parameter 'config' : " + config.getClass().getName());
+        }
+        configCache.remove(uniqueServiceName, config);
     }
 
     @Override

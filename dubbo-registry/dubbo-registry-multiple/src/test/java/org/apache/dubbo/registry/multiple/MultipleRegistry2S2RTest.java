@@ -24,6 +24,7 @@ import org.apache.dubbo.remoting.zookeeper.ZookeeperClient;
 import org.apache.dubbo.remoting.zookeeper.curator.CuratorZookeeperClient;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -144,8 +145,7 @@ public class MultipleRegistry2S2RTest {
 
         String path = "/dubbo/" + SERVICE2_NAME + "/providers";
         List<String> providerList = zookeeperClient.getChildren(path);
-        Assertions.assertTrue(!providerList.isEmpty());
-        System.out.println(providerList.get(0));
+        Assumptions.assumeTrue(!providerList.isEmpty());
 
         final List<URL> list = new ArrayList<URL>();
         multipleRegistry.subscribe(serviceUrl, new NotifyListener() {
@@ -173,6 +173,25 @@ public class MultipleRegistry2S2RTest {
         urls = MultipleRegistryTestUtil.getProviderURLsFromNotifyURLS(list);
         Assertions.assertEquals(1, list.size());
         Assertions.assertEquals("empty", list.get(0).getProtocol());
+    }
+
+    @Test
+    public void testAggregation() {
+        List<URL> result = new ArrayList<URL>();
+        List<URL> listToAggregate = new ArrayList<URL>();
+        URL url1= URL.valueOf("dubbo://127.0.0.1:20880/service1");
+        URL url2= URL.valueOf("dubbo://127.0.0.1:20880/service1");
+        listToAggregate.add(url1);
+        listToAggregate.add(url2);
+
+        URL registryURL = URL.valueOf("mock://127.0.0.1/RegistryService?attachments=zone=hangzhou,tag=middleware&enable-empty-protection=false");
+
+        MultipleRegistry.MultipleNotifyListenerWrapper.aggregateRegistryUrls(result, listToAggregate, registryURL);
+
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals(2, result.get(0).getParameters().size());
+        Assertions.assertEquals("hangzhou", result.get(0).getParameter("zone"));
+        Assertions.assertEquals("middleware", result.get(1).getParameter("tag"));
     }
 
 }

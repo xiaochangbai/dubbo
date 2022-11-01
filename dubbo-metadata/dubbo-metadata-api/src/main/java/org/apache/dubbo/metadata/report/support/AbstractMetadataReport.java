@@ -17,7 +17,7 @@
 package org.apache.dubbo.metadata.report.support;
 
 import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.ConfigUtils;
@@ -61,11 +61,14 @@ import static org.apache.dubbo.common.constants.CommonConstants.CONSUMER_SIDE;
 import static org.apache.dubbo.common.constants.CommonConstants.CYCLE_REPORT_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.FILE_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.PROVIDER_SIDE;
+import static org.apache.dubbo.common.constants.CommonConstants.REGISTRY_LOCAL_FILE_CACHE_ENABLED;
 import static org.apache.dubbo.common.constants.CommonConstants.REPORT_DEFINITION_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.REPORT_METADATA_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.RETRY_PERIOD_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.RETRY_TIMES_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.SYNC_REPORT_KEY;
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.COMMON_UNEXPECTED_EXCEPTION;
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.PROXY_FAILED_EXPORT_SERVICE;
 import static org.apache.dubbo.common.utils.StringUtils.replace;
 import static org.apache.dubbo.metadata.report.support.Constants.CACHE;
 import static org.apache.dubbo.metadata.report.support.Constants.DEFAULT_METADATA_REPORT_CYCLE_REPORT;
@@ -81,7 +84,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
     private static final int ONE_DAY_IN_MILLISECONDS = 60 * 24 * 60 * 1000;
     private static final int FOUR_HOURS_IN_MILLISECONDS = 60 * 4 * 60 * 1000;
     // Log output
-    protected final Logger logger = LoggerFactory.getLogger(getClass());
+    protected final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(getClass());
 
     // Local disk cache, where the special key value.registries records the list of metadata centers, and the others are the list of notified service providers
     final Properties properties = new Properties();
@@ -103,13 +106,15 @@ public abstract class AbstractMetadataReport implements MetadataReport {
 
     public AbstractMetadataReport(URL reportServerURL) {
         setUrl(reportServerURL);
+
+        boolean localCacheEnabled = reportServerURL.getParameter(REGISTRY_LOCAL_FILE_CACHE_ENABLED, true);
         // Start file save timer
         String defaultFilename = System.getProperty(USER_HOME) + DUBBO_METADATA +
             reportServerURL.getApplication() + "-" +
             replace(reportServerURL.getAddress(), ":", "-") + CACHE;
         String filename = reportServerURL.getParameter(FILE_KEY, defaultFilename);
         File file = null;
-        if (ConfigUtils.isNotEmpty(filename)) {
+        if (localCacheEnabled && ConfigUtils.isNotEmpty(filename)) {
             file = new File(filename);
             if (!file.exists() && file.getParentFile() != null && !file.getParentFile().exists()) {
                 if (!file.getParentFile().mkdirs()) {
@@ -200,7 +205,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
             } else {
                 reportCacheExecutor.execute(new SaveProperties(lastCacheChanged.incrementAndGet()));
             }
-            logger.warn("Failed to save service store file, cause: " + e.getMessage(), e);
+            logger.warn(COMMON_UNEXPECTED_EXCEPTION, "", "", "Failed to save service store file, cause: " + e.getMessage(), e);
         }
     }
 
@@ -212,7 +217,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
                     logger.info("Load service store file " + file + ", data: " + properties);
                 }
             } catch (Throwable e) {
-                logger.warn("Failed to load service store file " + file, e);
+                logger.warn(COMMON_UNEXPECTED_EXCEPTION, "", "", "Failed to load service store file" + file, e);
             }
         }
     }
@@ -236,7 +241,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
             }
 
         } catch (Throwable t) {
-            logger.warn(t.getMessage(), t);
+            logger.warn(COMMON_UNEXPECTED_EXCEPTION, "", "", t.getMessage(), t);
         }
     }
 
@@ -281,7 +286,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
             // retry again. If failed again, throw exception.
             failedReports.put(providerMetadataIdentifier, serviceDefinition);
             metadataReportRetry.startRetryTask();
-            logger.error("Failed to put provider metadata " + providerMetadataIdentifier + " in  " + serviceDefinition + ", cause: " + e.getMessage(), e);
+            logger.error(PROXY_FAILED_EXPORT_SERVICE, "", "", "Failed to put provider metadata " + providerMetadataIdentifier + " in  " + serviceDefinition + ", cause: " + e.getMessage(), e);
         }
     }
 
@@ -309,7 +314,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
             // retry again. If failed again, throw exception.
             failedReports.put(consumerMetadataIdentifier, serviceParameterMap);
             metadataReportRetry.startRetryTask();
-            logger.error("Failed to put consumer metadata " + consumerMetadataIdentifier + ";  " + serviceParameterMap + ", cause: " + e.getMessage(), e);
+            logger.error(PROXY_FAILED_EXPORT_SERVICE, "", "", "Failed to put consumer metadata " + consumerMetadataIdentifier + ";  " + serviceParameterMap + ", cause: " + e.getMessage(), e);
         }
     }
 
@@ -432,7 +437,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
     }
 
     class MetadataReportRetry {
-        protected final Logger logger = LoggerFactory.getLogger(getClass());
+        protected final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(getClass());
 
         final ScheduledExecutorService retryExecutor = Executors.newScheduledThreadPool(0, new NamedThreadFactory("DubboMetadataReportRetryTimer", true));
         volatile ScheduledFuture retryScheduledFuture;
@@ -465,7 +470,7 @@ public abstract class AbstractMetadataReport implements MetadataReport {
                                     cancelRetryTask();
                                 }
                             } catch (Throwable t) { // Defensive fault tolerance
-                                logger.error("Unexpected error occur at failed retry, cause: " + t.getMessage(), t);
+                                logger.error(COMMON_UNEXPECTED_EXCEPTION, "", "", "Unexpected error occur at failed retry, cause: " + t.getMessage(), t);
                             }
                         }, 500, retryPeriod, TimeUnit.MILLISECONDS);
                     }

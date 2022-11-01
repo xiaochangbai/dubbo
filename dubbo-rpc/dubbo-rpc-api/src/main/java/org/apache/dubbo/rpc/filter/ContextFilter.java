@@ -56,7 +56,7 @@ import static org.apache.dubbo.rpc.Constants.TOKEN_KEY;
  *
  * @see RpcContext
  */
-@Activate(group = PROVIDER, order = -10000)
+@Activate(group = PROVIDER, order = Integer.MIN_VALUE)
 public class ContextFilter implements Filter, Filter.Listener {
 
     private static final Set<String> UNLOADING_KEYS;
@@ -97,7 +97,9 @@ public class ContextFilter implements Filter, Filter.Listener {
 
         RpcContext context = RpcContext.getServerAttachment();
 //                .setAttachments(attachments)  // merged from dubbox
-        context.setLocalAddress(invoker.getUrl().getHost(), invoker.getUrl().getPort());
+        if (context.getLocalAddress() == null) {
+            context.setLocalAddress(invoker.getUrl().getHost(), invoker.getUrl().getPort());
+        }
 
         String remoteApplication = invocation.getAttachment(REMOTE_APPLICATION_KEY);
         if (StringUtils.isNotEmpty(remoteApplication)) {
@@ -131,6 +133,9 @@ public class ContextFilter implements Filter, Filter.Listener {
             return invoker.invoke(invocation);
         } finally {
             context.clearAfterEachInvoke(true);
+            if (context.isAsyncStarted()) {
+                removeContext();
+            }
         }
     }
 

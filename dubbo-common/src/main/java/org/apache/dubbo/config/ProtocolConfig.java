@@ -24,6 +24,7 @@ import java.util.Map;
 
 import static org.apache.dubbo.common.constants.CommonConstants.DUBBO_PROTOCOL;
 import static org.apache.dubbo.common.constants.CommonConstants.SSL_ENABLED_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.THREAD_POOL_EXHAUSTED_LISTENERS_KEY;
 
 /**
  * ProtocolConfig
@@ -88,6 +89,12 @@ public class ProtocolConfig extends AbstractConfig {
      * Thread pool's queue length
      */
     private Integer queues;
+
+
+    /**
+     * Thread pool exhausted listeners
+     */
+    private String threadPoolExhaustedListeners;
 
     /**
      * Max acceptable connections
@@ -200,6 +207,11 @@ public class ProtocolConfig extends AbstractConfig {
 
     private Boolean sslEnabled;
 
+    /*
+     * Extra Protocol for this service, using Port Unification Server
+     */
+    private String extProtocol;
+
     public ProtocolConfig() {
     }
 
@@ -234,21 +246,6 @@ public class ProtocolConfig extends AbstractConfig {
             name = DUBBO_PROTOCOL;
         }
     }
-
-//    @Override
-//    public List<String> getPrefixes() {
-//        List<String> prefixes = new ArrayList<>();
-//        if (StringUtils.hasText(this.getId())) {
-//            // dubbo.protocols.{protocol-id}
-//            prefixes.add(CommonConstants.DUBBO + "." + getPluralTagName(this.getClass()) + "." + this.getId());
-//        } else if (StringUtils.hasText(this.getName()) && !StringUtils.isEquals(this.getId(), this.getName())) {
-//            // dubbo.protocols.{protocol-name}
-//            prefixes.add(CommonConstants.DUBBO + "." + getPluralTagName(this.getClass()) + "." + this.getName());
-//        }
-//        // dubbo.protocol
-//        prefixes.add(getTypePrefix());
-//        return prefixes;
-//    }
 
     @Parameter(excluded = true)
     public String getName() {
@@ -311,6 +308,15 @@ public class ProtocolConfig extends AbstractConfig {
 
     public void setThreadname(String threadname) {
         this.threadname = threadname;
+    }
+
+    @Parameter(key = THREAD_POOL_EXHAUSTED_LISTENERS_KEY)
+    public String getThreadPoolExhaustedListeners() {
+        return threadPoolExhaustedListeners;
+    }
+
+    public void setThreadPoolExhaustedListeners(String threadPoolExhaustedListeners) {
+        this.threadPoolExhaustedListeners = threadPoolExhaustedListeners;
     }
 
     public Integer getCorethreads() {
@@ -566,4 +572,11 @@ public class ProtocolConfig extends AbstractConfig {
         return StringUtils.isNotEmpty(name);
     }
 
+    public String getExtProtocol() {
+        return extProtocol;
+    }
+
+    public void setExtProtocol(String extProtocol) {
+        this.extProtocol = extProtocol;
+    }
 }

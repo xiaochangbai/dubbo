@@ -52,6 +52,7 @@ public class DubboConfigDefaultPropertyValueBeanPostProcessor extends GenericBea
      */
     public static final String BEAN_NAME = "dubboConfigDefaultPropertyValueBeanPostProcessor";
 
+    @Override
     protected void processBeforeInitialization(AbstractConfig dubboConfigBean, String beanName) throws BeansException {
         // ignore auto generate bean name
         if (!beanName.contains("#")) {
@@ -84,7 +85,7 @@ public class DubboConfigDefaultPropertyValueBeanPostProcessor extends GenericBea
 
             Object propertyValue = invokeMethod(getterMethod, bean);
 
-            if (propertyValue != null) { // If The return value of "getName" method is not null
+            if (propertyValue != null) { // If The return value of "getId" method is not null
                 return;
             }
 

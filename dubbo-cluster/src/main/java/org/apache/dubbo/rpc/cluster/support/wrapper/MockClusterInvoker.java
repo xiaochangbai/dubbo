@@ -17,13 +17,15 @@
 package org.apache.dubbo.rpc.cluster.support.wrapper;
 
 import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.constants.CommonConstants;
+import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.ConfigUtils;
 import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.rpc.AsyncRpcResult;
 import org.apache.dubbo.rpc.Invocation;
+import org.apache.dubbo.rpc.InvokeMode;
 import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.Result;
 import org.apache.dubbo.rpc.RpcContext;
@@ -31,17 +33,21 @@ import org.apache.dubbo.rpc.RpcException;
 import org.apache.dubbo.rpc.RpcInvocation;
 import org.apache.dubbo.rpc.cluster.ClusterInvoker;
 import org.apache.dubbo.rpc.cluster.Directory;
+import org.apache.dubbo.rpc.protocol.dubbo.FutureAdapter;
 import org.apache.dubbo.rpc.support.MockInvoker;
+import org.apache.dubbo.rpc.support.RpcUtils;
 
 import java.util.List;
 
+import static org.apache.dubbo.common.constants.LoggerCodeConstants.CLUSTER_FAILED_MOCK_REQUEST;
 import static org.apache.dubbo.rpc.Constants.MOCK_KEY;
 import static org.apache.dubbo.rpc.cluster.Constants.FORCE_KEY;
 import static org.apache.dubbo.rpc.cluster.Constants.INVOCATION_NEED_MOCK;
 
 public class MockClusterInvoker<T> implements ClusterInvoker<T> {
 
-    private static final Logger logger = LoggerFactory.getLogger(MockClusterInvoker.class);
+    private static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(MockClusterInvoker.class);
+    private static final boolean setFutureWhenSync = Boolean.parseBoolean(System.getProperty(CommonConstants.SET_FUTURE_IN_SYNC_MODE, "true"));
 
     private final Directory<T> directory;
 
@@ -97,7 +103,7 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
             result = this.invoker.invoke(invocation);
         } else if (value.startsWith(FORCE_KEY)) {
             if (logger.isWarnEnabled()) {
-                logger.warn("force-mock: " + invocation.getMethodName() + " force-mock enabled , url : " + getUrl());
+                logger.warn(CLUSTER_FAILED_MOCK_REQUEST,"force mock","","force-mock: " + invocation.getMethodName() + " force-mock enabled , url : " + getUrl());
             }
             //force:direct mock
             result = doMockInvoke(invocation, null);
@@ -122,7 +128,7 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
                 }
 
                 if (logger.isWarnEnabled()) {
-                    logger.warn("fail-mock: " + invocation.getMethodName() + " fail-mock enabled , url : " + getUrl(), e);
+                    logger.warn(CLUSTER_FAILED_MOCK_REQUEST,"failed to mock invoke","","fail-mock: " + invocation.getMethodName() + " fail-mock enabled , url : " + getUrl(),e);
                 }
                 result = doMockInvoke(invocation, e);
             }
@@ -134,6 +140,9 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
     private Result doMockInvoke(Invocation invocation, RpcException e) {
         Result result;
         Invoker<T> mockInvoker;
+
+        RpcInvocation rpcInvocation = (RpcInvocation)invocation;
+        rpcInvocation.setInvokeMode(RpcUtils.getInvokeMode(getUrl(),invocation));
 
         List<Invoker<T>> mockInvokers = selectMockInvoker(invocation);
         if (CollectionUtils.isEmpty(mockInvokers)) {
@@ -151,6 +160,10 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
             }
         } catch (Throwable me) {
             throw new RpcException(getMockExceptionMessage(e, me), me.getCause());
+        }
+        if (setFutureWhenSync || rpcInvocation.getInvokeMode() != InvokeMode.SYNC) {
+            // set server context
+            RpcContext.getServiceContext().setFuture(new FutureAdapter<>(((AsyncRpcResult)result).getResponseFuture()));
         }
         return result;
     }

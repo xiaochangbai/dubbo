@@ -42,7 +42,7 @@ public class NettyServerHandler extends ChannelDuplexHandler {
      * the cache for alive worker channel.
      * <ip:port, dubbo channel>
      */
-    private final Map<String, Channel> channels = new ConcurrentHashMap<String, Channel>();
+    private final Map<String, Channel> channels = new ConcurrentHashMap<>();
 
     private final URL url;
 
@@ -95,6 +95,8 @@ public class NettyServerHandler extends ChannelDuplexHandler {
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         NettyChannel channel = NettyChannel.getOrAddChannel(ctx.channel(), url, handler);
         handler.received(channel, msg);
+        // trigger qos handler
+        ctx.fireChannelRead(msg);
     }
 
 

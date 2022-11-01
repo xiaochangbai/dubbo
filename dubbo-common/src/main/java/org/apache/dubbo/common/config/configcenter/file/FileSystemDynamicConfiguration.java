@@ -287,24 +287,32 @@ public class FileSystemDynamicConfiguration extends TreePathDynamicConfiguration
                 WatchKey watchKey = null;
                 try {
                     watchKey = watchService.take();
-                    if (watchKey.isValid()) {
-                        for (WatchEvent event : watchKey.pollEvents()) {
-                            WatchEvent.Kind kind = event.kind();
-                            // configChangeType's key to match WatchEvent's Kind
-                            ConfigChangeType configChangeType = CONFIG_CHANGE_TYPES_MAP.get(kind.name());
-                            if (configChangeType != null) {
-                                Path configDirectoryPath = (Path) watchKey.watchable();
-                                Path currentPath = (Path) event.context();
-                                Path configFilePath = configDirectoryPath.resolve(currentPath);
-                                File configDirectory = configDirectoryPath.toFile();
-                                executeMutually(configDirectory, () -> {
-                                    fireConfigChangeEvent(configDirectory, configFilePath.toFile(), configChangeType);
-                                    signalConfigDirectory(configDirectory);
-                                    return null;
-                                });
-                            }
-                        }
+
+                    if (!watchKey.isValid()) {
+                        continue;
                     }
+
+                    for (WatchEvent event : watchKey.pollEvents()) {
+                        WatchEvent.Kind kind = event.kind();
+                        // configChangeType's key to match WatchEvent's Kind
+                        ConfigChangeType configChangeType = CONFIG_CHANGE_TYPES_MAP.get(kind.name());
+
+                        if (configChangeType == null) {
+                            continue;
+                        }
+
+                        Path configDirectoryPath = (Path) watchKey.watchable();
+                        Path currentPath = (Path) event.context();
+                        Path configFilePath = configDirectoryPath.resolve(currentPath);
+                        File configDirectory = configDirectoryPath.toFile();
+
+                        executeMutually(configDirectory, () -> {
+                            fireConfigChangeEvent(configDirectory, configFilePath.toFile(), configChangeType);
+                            signalConfigDirectory(configDirectory);
+                            return null;
+                        });
+                    }
+
                 } catch (Exception e) {
                     return;
                 } finally {
@@ -402,7 +410,7 @@ public class FileSystemDynamicConfiguration extends TreePathDynamicConfiguration
     }
 
     @Override
-    protected void doAddListener(String pathKey, ConfigurationListener listener) {
+    protected void doAddListener(String pathKey, ConfigurationListener listener, String key, String group) {
         doInListener(pathKey, (configFilePath, listeners) -> {
             if (listeners.isEmpty()) { // If no element, it indicates watchService was registered before
                 ThrowableConsumer.execute(configFilePath, configFile -> {
